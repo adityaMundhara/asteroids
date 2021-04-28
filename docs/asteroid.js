@@ -5,8 +5,8 @@ var space;
 /** @type {CanvasRenderingContext2D} */
 var context;
 //keyboard vars
-const MAX_MISSILES = 10;
-const MAX_ASTEROID = 10;
+const MAX_MISSILES = 3;
+const MAX_ASTEROID = 7;
 var missilesPool = [];
 var asteroidPool = [];
 var keyLeft = false;
@@ -15,6 +15,10 @@ var keyRight = false;
 var keyDown = false;
 var keySpace = false;
 var interval;
+var asteroid_Speed = 4;
+var ship_Speed = 7;
+var inertia = 0;
+
 function keyboardInit() {
 	window.onkeydown = function (e) {
 		switch (e.keyCode) {
@@ -49,6 +53,8 @@ function keyboardInit() {
 				keySpace = true;
 
 				break;
+			case 40:
+				keyDown = true;
 		}
 
 		e.preventDefault();
@@ -87,6 +93,8 @@ function keyboardInit() {
 				keySpace = false;
 
 				break;
+			case 40:
+				keyDown = false;
 		}
 
 		e.preventDefault();
@@ -94,12 +102,8 @@ function keyboardInit() {
 }
 
 function renderer() {
-	space.frame_width = canvas.clientWidth;
-	space.frame_height = canvas.clientHeight;
-	canvas.width = space.frame_width;
-	canvas.height = space.frame_height;
-	// space,spaceship,bullets,asteroid
 	space.renderSpace();
+	// space,spaceship,bullets,asteroid
 	spaceShip.renderSpaceShip();
 	for (let i = 0; i < missilesPool.length; i++) {
 		missilesPool[i].renderMissile();
@@ -119,17 +123,27 @@ class Space {
 	frame_height;
 	constructor() {
 		var rect = canvas.getBoundingClientRect();
-		canvas.width = rect.width ;
-		canvas.height = rect.height ;
+		canvas.width = rect.width;
+		canvas.height = rect.height;
 		this.frame_width = canvas.width;
 		this.frame_height = canvas.height;
 	}
 	renderSpace() {
 		context.fillStyle = "#000";
 		context.fillRect(0, 0, this.frame_width, this.frame_height);
+		context.globalAlpha = 0.4;
+		for(let i=0;i<100;i++){
+			context.beginPath();
+			context.arc(
+				Math.floor(this.frame_width*Math.random())
+			,Math.floor(this.frame_height*Math.random())
+			,1,0,2*Math.PI)
+			context.stroke();
+		}
+		context.globalAlpha=1;
 	}
 
-}	
+}
 
 class SpaceShip extends MovingObjects {
 	speed = 0;
@@ -170,7 +184,7 @@ class Missile extends MovingObjects {
 	renderMissile() {
 		context.lineWidth = (Math.random() > 0.9) ? 2 : 1;
 		context.beginPath();
-		context.arc(this.pos_x, this.pos_y, 1, 0, 2 * Math.PI);
+		context.arc(this.pos_x, this.pos_y, 2, 0, 2 * Math.PI);
 		context.stroke();
 	}
 }
@@ -204,8 +218,8 @@ function updateAsteroid() {
 	let remove = [];
 
 	for (let i = 0; i < asteroidPool.length; i++) {
-		asteroidPool[i].pos_x += Math.cos(asteroidPool[i].angle) * 5;
-		asteroidPool[i].pos_y += Math.sin(asteroidPool[i].angle) * 5;
+		asteroidPool[i].pos_x += Math.cos(asteroidPool[i].angle) * asteroid_Speed;
+		asteroidPool[i].pos_y += Math.sin(asteroidPool[i].angle) * asteroid_Speed;
 
 		if (asteroidPool[i].pos_x >= space.frame_width || asteroidPool[i].pos_x < 0 || asteroidPool[i].pos_y > space.frame_height || asteroidPool[i].pos_y < 0) {
 			remove.push(i);
@@ -218,9 +232,31 @@ function updateAsteroid() {
 	for (let ast = asteroidPool.length; ast < MAX_ASTEROID; ast++) {
 		// V shaped asteroid field, constant X value with random 0-90 deg of field view for asteroid
 		// Asteroid Coordinates : top => (rand_X,0) , right=>(max_X,rand_y), bottom=> (rand_x,max_Y), left=>(0,rand_y)
-		asteroidPool[ast] = new Asteroid(
-			Math.floor(space.frame_width * Math.random()),
-			Math.floor(space.frame_height * Math.random()), Math.floor(90 * Math.random()) + angle)
+		var x = 0,
+			y = 0,
+			deg = Math.floor(90 * Math.random()) + angle;
+		switch (Math.floor(4 * Math.random())) {
+			case 1: { // rand_x,0
+				x = Math.floor(space.frame_width * Math.random());
+				break;
+			}
+			case 2: { // max_x,rand_y
+				x = space.frame_width;
+				y = Math.floor(space.frame_height * Math.random());
+				break;
+			}
+			case 3: { //rand_x,maxy
+				x = Math.floor(space.frame_width * Math.random());
+				y = space.frame_height;
+				break;
+			}
+			case 4: {
+				// 0,rand_y
+				y = Math.floor(space.frame_height * Math.random());
+				break;
+			}
+		}
+		asteroidPool[ast] = new Asteroid(x, y, deg);
 	}
 
 }
@@ -229,8 +265,8 @@ function updateMissiles() {
 	let length = missilesPool.length;
 	let remove = [];
 	for (let i = 0; i < length; i++) {
-		missilesPool[i].pos_x += Math.cos(missilesPool[i].angle) * 7;
-		missilesPool[i].pos_y += Math.sin(missilesPool[i].angle) * 7;
+		missilesPool[i].pos_x += Math.cos(missilesPool[i].angle) * 10;
+		missilesPool[i].pos_y += Math.sin(missilesPool[i].angle) * 10;
 		if (missilesPool[i].pos_x >= space.frame_width || missilesPool[i].pos_x < 0 || missilesPool[i].pos_y > space.frame_height || missilesPool[i].pos_y < 0) {
 			remove.push(i);
 		}
@@ -243,8 +279,12 @@ function updateMissiles() {
 function updateSpaceShip() {
 
 	if (keyUp) {
-		spaceShip.pos_x += Math.cos(spaceShip.angle) * 10;
-		spaceShip.pos_y += Math.sin(spaceShip.angle) * 10;
+		inertia = 0.8;
+		spaceShip.pos_x += Math.cos(spaceShip.angle) * ship_Speed;
+		spaceShip.pos_y += Math.sin(spaceShip.angle) * ship_Speed;
+	} else {
+		spaceShip.pos_x += Math.cos(spaceShip.angle) * inertia;
+		spaceShip.pos_y += Math.sin(spaceShip.angle) * inertia;
 	}
 	if (keyLeft) spaceShip.angle -= 0.1;
 	if (keyRight) spaceShip.angle += 0.1;
@@ -266,6 +306,9 @@ function updateSpaceShip() {
 		};
 		keySpace = false;
 	}
+	if (keyDown) {
+		inertia = 0;
+	}
 }
 
 function killAsteroids() {
@@ -281,7 +324,7 @@ function killAsteroids() {
 				removeMissile.push(i);
 				removeAsts.push(j);
 				if (!spaceShip.isDead) {
-					spaceShip.score += 20;
+					spaceShip.score += 200;
 				}
 			}
 		}
@@ -309,33 +352,39 @@ function score() {
 	ctx.fillStyle = "red";
 	ctx.textAlign = "center";
 	ctx.fillText(`Score:${spaceShip.score}`,
-	70,50);
+		70, 50);
 }
 
 function gameOverScreen() {
-	var ctx = context;	
-	ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);
+	var ctx = context;
+	ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 	context.fillStyle = "#000";
-	context.fillRect(0, 0, canvas.clientWidth,canvas.clientHeight);
+	context.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 	ctx.font = "60px Comic Sans MS";
 	ctx.fillStyle = "red";
 	ctx.textAlign = "center";
-	ctx.fillText("Game Over", canvas.width/2, canvas.height/2);
+	ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2);
 	ctx.font = '60px System, monospace';
 	ctx.fillText(`Score:${spaceShip.score}`,
-	canvas.width/2, canvas.height/2+50);
-	
+		canvas.width / 2, canvas.height / 2 + 50);
+	ctx.fillText(`Click Space to start`,
+		canvas.width / 2, canvas.height - 100);
 }
 
-window.onload = function () {
+function init() {
 	canvas = document.getElementById('mainFrame');
 	context = canvas.getContext('2d');
+	context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 	space = new Space();
 	spaceShip = new SpaceShip();
+	asteroidPool=[];
+	missilesPool=[];
+	inertia=0;
 	startLoop();
 	keyboardInit();
-};
+}
 
+window.onload = init;
 window.onresize = update;
 
 function loop() {
@@ -344,14 +393,18 @@ function loop() {
 		renderer();
 		killAsteroids();
 		isGameOver();
-		score()
+		score();
 	} else {
-		window.clearInterval(interval);
 		gameOverScreen();
+		if (keySpace) {
+			window.clearInterval(interval);
+			spaceShip.isDead = false;
+			init();
+		}
 	}
 
 }
 
-function startLoop(){
-	 interval = setInterval(loop, 1000 / 60);
+function startLoop() {
+	interval = setInterval(loop, 1000 / 60);
 }
